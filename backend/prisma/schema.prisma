@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUM ============
+
+enum Role {
+  ADMIN       // quản trị hệ thống
+  MANAGER     // quản lý / trưởng nhóm
+  EMPLOYEE    // nhân viên / kỹ thuật viên
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+}
+
+enum CustomerType {
+  ENTERPRISE
+  INDIVIDUAL
+  GOVERNMENT
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMMENTED
+  DEADLINE_REMINDER
+  TASK_OVERDUE
+}
+
+// ============ NGƯỜI DÙNG ============
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  avatarUrl    String?
+  role         Role     @default(EMPLOYEE)
+  department   String?  // phòng ban: Kỹ thuật, Kinh doanh, ...
+  isActive     Boolean  @default(true)
+  pushToken    String?  // token gửi thông báo đẩy cho Mobile
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  projectsOwned  Project[]       @relation("ProjectOwner")
+  memberships    ProjectMember[]
+  tasksCreated   Task[]          @relation("TaskCreator")
+  tasksAssigned  Task[]          @relation("TaskAssignee")
+  comments       Comment[]
+  attachments    Attachment[]
+  notifications  Notification[]
+  histories      TaskHistory[]
+}
+
+// ============ DỰ ÁN ============
+
+model Project {
+  id          String        @id @default(uuid())
+  code        String        @unique  // mã dự án, vd: DA-2026-001
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNING)
+  startDate   DateTime?
+  endDate     DateTime?
+  ownerId     String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members ProjectMember[]
+  tasks   Task[]
+
+  @@index([ownerId])
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+// ============ ĐẶC THÙ VIỄN THÔNG ============
+
+model Customer {
+  id        String       @id @default(uuid())
+  code      String       @unique  // mã khách hàng
+  name      String
+  type      CustomerType @default(ENTERPRISE)
+  contact   String?      // người liên hệ
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  sites Site[]
+  tasks Task[]
+}
+
+model Site {
+  id         String   @id @default(uuid())
+  name       String   // vd: Trạm BTS Hải Châu, Tòa nhà ABC
+  address    String
+  latitude   Float?
+  longitude  Float?
+  customerId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  tasks    Task[]
+
+  @@index([customerId])
+}
+
+model TaskType {
+  id          String  @id @default(uuid())
+  code        String  @unique  // INSTALL, WARRANTY, INCIDENT, SURVEY, MAINTENANCE
+  name        String
+  description String?
+  slaHours    Int?    // thời gian xử lý tối đa (giờ), dùng cho báo cáo trễ hạn
+  color       String? // màu hiển thị trên Web/Mobile
+
+  tasks Task[]
+}
+
+// ============ CÔNG VIỆC ============
+
+model Task {
+  id          String     @id @default(uuid())
+  code        String     @unique  // mã công việc, vd: CV-000123
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+  progress    Int        @default(0)  // 0-100
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  projectId  String
+  creatorId  String
+  assigneeId String?
+  typeId     String?
+  customerId String?
+  siteId     String?
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator  User      @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignee User?     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  type     TaskType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  site     Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  comments    Comment[]
+  attachments Attachment[]
+  histories   TaskHistory[]
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+}
+
+model Attachment {
+  id         String   @id @default(uuid())
+  fileName   String
+  fileUrl    String
+  mimeType   String?
+  sizeBytes  Int?
+  taskId     String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([taskId])
+}
+
+model TaskHistory {
+  id         String      @id @default(uuid())
+  taskId     String
+  userId     String
+  fromStatus TaskStatus?
+  toStatus   TaskStatus
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+}
+
+// ============ THÔNG BÁO ============
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  taskId    String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
