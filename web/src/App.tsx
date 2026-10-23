@@ -1,10 +1,13 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Placeholder from "./pages/Placeholder";
-import type { ReactNode } from "react";
+import Login from "./pages/Login";
+import ProjectDetail from "./pages/ProjectDetail";
+import Projects from "./pages/Projects";
+import Tasks from "./pages/Tasks";
+import Users from "./pages/Users";
 import type { Role } from "./types";
 
 function Protected({ roles, children }: { roles?: Role[]; children: ReactNode }) {
@@ -26,12 +29,20 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="tasks" element={<Placeholder title="Công việc" />} />
+        <Route path="tasks" element={<Tasks />} />
         <Route
           path="projects"
           element={
             <Protected roles={["ADMIN", "MANAGER"]}>
-              <Placeholder title="Dự án" />
+              <Projects />
+            </Protected>
+          }
+        />
+        <Route
+          path="projects/:id"
+          element={
+            <Protected roles={["ADMIN", "MANAGER"]}>
+              <ProjectDetail />
             </Protected>
           }
         />
@@ -39,7 +50,7 @@ export default function App() {
           path="users"
           element={
             <Protected roles={["ADMIN"]}>
-              <Placeholder title="Người dùng" />
+              <Users />
             </Protected>
           }
         />

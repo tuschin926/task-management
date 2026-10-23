@@ -29,7 +29,14 @@ api.interceptors.response.use(
 
 export function errMsg(e: unknown): string {
   if (axios.isAxiosError(e)) {
-    return e.response?.data?.message ?? "Không kết nối được máy chủ";
+    const d = e.response?.data;
+    if (!d) return "Không kết nối được máy chủ";
+    if (Array.isArray(d.errors) && d.errors.length) {
+      return `${d.message}: ${d.errors
+        .map((x: { message: string }) => x.message)
+        .join("; ")}`;
+    }
+    return d.message ?? "Có lỗi xảy ra";
   }
   return "Có lỗi xảy ra";
 }
